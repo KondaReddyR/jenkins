@@ -1,19 +1,64 @@
-version: '3.1'
- 
+version: "3.1"
+
 services:
- 
-  main:
-    image: rhels/jenkins
+
+  jenkins-master:
+    image: kr0001/jenkins
     ports:
       - 8080:8080
       - 50000:50000
+    environment:
+      - JENKINS_OPTS="--prefix=/jenkins"
+    networks:
+      - proxy
+    volumes:
+      - /Users/kr0001/Downloads/jenkins_home:/var/jenkins_home
+    deploy:
+      placement:
+        constraints: [node.role == worker]
+      labels:
+        - com.df.notify=true
+        - com.df.distribute=true
+        - com.df.servicePath=/jenkins
+        - com.df.port=8080
+      resources:
+        reservations:
+          memory: 500M
+        limits:
+          memory: 750M
     secrets:
       - jenkins-user
       - jenkins-pass
- 
+
+  jenkins-agent:
+    image: vfarcic/jenkins-swarm-agent
+    environment:
+      - USER_NAME_SECRET=/run/secrets/${JENKINS_USER_SECRET:-jenkins-user}
+      - PASSWORD_SECRET=/run/secrets/${JENKINS_PASS_SECRET:-jenkins-pass}
+      - COMMAND_OPTIONS=-master http://jenkins-master:8080/jenkins -labels 'docker' -executors 5
+    networks:
+      - proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    secrets:
+      - jenkins-user
+      - jenkins-pass
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.role == worker]
+      resources:
+        reservations:
+          memory: 250M
+        limits:
+          memory: 500M
+
+networks:
+  proxy:
+    external: true
+
 secrets:
   jenkins-user:
     external: true
   jenkins-pass:
     external: true
-
