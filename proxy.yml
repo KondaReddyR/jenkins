@@ -19,7 +19,9 @@ services:
       - MODE=swarm
       - CONNECTION_MODE=${CONNECTION_MODE:-http-keep-alive}
     deploy:
-      replicas: 3
+      mode: global
+      placement:
+        constraints: [node.role == manager]
 
   swarm-listener:
     image: vfarcic/docker-flow-swarm-listener
@@ -31,13 +33,12 @@ services:
       - DF_NOTIFY_CREATE_SERVICE_URL=http://proxy:8080/v1/docker-flow-proxy/reconfigure
       - DF_NOTIFY_REMOVE_SERVICE_URL=http://proxy:8080/v1/docker-flow-proxy/remove
     deploy:
+      mode: global
       placement:
         constraints: [node.role == manager]
-        
+
   visualizer:
     image: dockersamples/visualizer:stable
-    ports:
-      - "9090:8080"
     stop_grace_period: 1m30s
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
@@ -48,8 +49,30 @@ services:
     deploy:
       placement:
         constraints: [node.role == manager]
+      replicas: 1
       labels:
         - com.df.notify=true
         - com.df.distribute=true
         - com.df.servicePath=/visualizer
         - com.df.port=8080
+  
+  letsencrypt-companion:
+    image: hamburml/docker-flow-letsencrypt:latest
+    networks:
+      - proxy
+    environment:
+      - DOMAIN_1=('cygnics.com' 'www.cygnics.com')
+      - CERTBOT_EMAIL=kr@rhels.com
+      - PROXY_ADDRESS=proxy
+      - CERTBOT_CRON_RENEW=('0 3 * * *' '0 15 * * *')
+    volumes:
+          - /etc/letsencrypt:/etc/letsencrypt
+    deploy:
+      labels:
+        - com.df.servicePath=/.well-known/acme-challenge
+        - com.df.notify=true
+        - com.df.distribute=true
+        - com.df.port=80
+      placement:
+        constraints: [node.role == manager]
+      replicas: 1
